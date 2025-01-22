@@ -1,0 +1,3 @@
+[workspace]
+members = ["luau-sys"]
+resolver = "3"
