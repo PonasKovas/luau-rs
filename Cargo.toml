@@ -1,3 +1,3 @@
 [workspace]
-members = ["luau-sys"]
+members = [ "luau","luau-sys"]
 resolver = "3"

@@ -8,7 +8,7 @@ fn main() {
         .arg("update")
         .arg("--init")
         .arg("--recursive")
-        .arg("--depth")
+        .arg("--depth") // shallow, without fetching the whole history
         .arg("1")
         .status()
         .expect("Failed to fetch git submodules");
@@ -29,7 +29,6 @@ fn main() {
     Command::new("cmake")
         .arg("-DLUAU_BUILD_CLI=OFF")
         .arg("-DLUAU_BUILD_TESTS=OFF")
-        .arg("-DLUAU_STATIC_CRT=ON")
         .arg("-DLUAU_EXTERN_C=ON")
         .arg("-DCMAKE_BUILD_TYPE=RelWithDebInfo")
         .arg("-S")
@@ -61,6 +60,7 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
+        .clang_arg("-fparse-all-comments") // keeps the comments
         .generate()
         .expect("generating VM bindings");
 
@@ -73,10 +73,12 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
+        .clang_arg("-fparse-all-comments") // keeps the comments
         .generate()
         .expect("generating Compiler bindings");
 
     // write the bindings to the OUT_DIR
+    // these are included! from in lib.rs
     vm_bindings
         .write_to_file(out_dir.join("vm_bindings.rs"))
         .unwrap();
