@@ -1,1 +1,1 @@
-mod compiler;
+pub mod compiler;

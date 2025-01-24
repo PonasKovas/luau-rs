@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 luau-sys = { path = "../luau-sys/" }
+malloced = "1.3.1"

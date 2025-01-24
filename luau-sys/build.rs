@@ -45,6 +45,7 @@ fn main() {
         .arg("--target")
         .arg("Luau.VM")
         .arg("Luau.Compiler")
+        .arg("Luau.Ast")
         .arg("--config")
         .arg("RelWithDebInfo")
         .status()
@@ -60,6 +61,7 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
+        .newtype_enum(".*") // generate all enums in newtype enum flavor
         .clang_arg("-fparse-all-comments") // keeps the comments
         .generate()
         .expect("generating VM bindings");
@@ -77,6 +79,21 @@ fn main() {
         .generate()
         .expect("generating Compiler bindings");
 
+    let commmon_bytecode_bindings = Builder::default()
+        .header(
+            luau_source
+                .join("Common")
+                .join("include")
+                .join("Luau")
+                .join("Bytecode.h")
+                .to_str()
+                .unwrap(),
+        )
+        .newtype_enum(".*") // generate all enums in newtype enum flavor
+        .clang_arg("-fparse-all-comments") // keeps the comments
+        .generate()
+        .expect("generating Common/Bytecode bindings");
+
     // write the bindings to the OUT_DIR
     // these are included! from in lib.rs
     vm_bindings
@@ -85,9 +102,14 @@ fn main() {
     compiler_bindings
         .write_to_file(out_dir.join("compiler_bindings.rs"))
         .unwrap();
+    commmon_bytecode_bindings
+        .write_to_file(out_dir.join("common_bytecode_bindings.rs"))
+        .unwrap();
 
     println!("cargo:rerun-if-changed=../vendor/");
     println!("cargo:rustc-link-search=native={}", build_dir.display());
     println!("cargo:rustc-link-lib=static=Luau.VM");
     println!("cargo:rustc-link-lib=static=Luau.Compiler");
+    println!("cargo:rustc-link-lib=static=Luau.Ast");
+    println!("cargo:rustc-link-lib=dylib=stdc++");
 }
