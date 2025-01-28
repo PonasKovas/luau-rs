@@ -61,6 +61,7 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
+        .allowlist_item("[Ll]ua.*") // only generate for stuff starting with lua
         .newtype_enum(".*") // generate all enums in newtype enum flavor
         .clang_arg("-fparse-all-comments") // keeps the comments
         .generate()
@@ -75,6 +76,7 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
+        .allowlist_item("[Ll]ua.*") // only generate for stuff starting with lua
         .clang_arg("-fparse-all-comments") // keeps the comments
         .generate()
         .expect("generating Compiler bindings");
@@ -89,6 +91,7 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
+        .allowlist_item("[Ll]ua.*") // only generate for stuff starting with lua
         .newtype_enum(".*") // generate all enums in newtype enum flavor
         .clang_arg("-fparse-all-comments") // keeps the comments
         .generate()
@@ -111,5 +114,8 @@ fn main() {
     println!("cargo:rustc-link-lib=static=Luau.VM");
     println!("cargo:rustc-link-lib=static=Luau.Compiler");
     println!("cargo:rustc-link-lib=static=Luau.Ast");
+    // for now we just do this but in reality other platforms such as MacOS or android or others
+    // will have a different name for the C++ stl, we also want to read env vars if set
+    // check cc crate for example how to handle this
     println!("cargo:rustc-link-lib=dylib=stdc++");
 }
