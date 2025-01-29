@@ -29,7 +29,6 @@ fn main() {
     Command::new("cmake")
         .arg("-DLUAU_BUILD_CLI=OFF")
         .arg("-DLUAU_BUILD_TESTS=OFF")
-        .arg("-DLUAU_EXTERN_C=ON")
         .arg("-DCMAKE_BUILD_TYPE=RelWithDebInfo")
         .arg("-S")
         .arg(&luau_source)
@@ -64,6 +63,7 @@ fn main() {
         .allowlist_item("[Ll]ua.*") // only generate for stuff starting with lua
         .newtype_enum(".*") // generate all enums in newtype enum flavor
         .clang_arg("-fparse-all-comments") // keeps the comments
+        .clang_args(["-x", "c++"]) // c++ mode even though the file is .h
         .generate()
         .expect("generating VM bindings");
 
@@ -78,6 +78,7 @@ fn main() {
         )
         .allowlist_item("[Ll]ua.*") // only generate for stuff starting with lua
         .clang_arg("-fparse-all-comments") // keeps the comments
+        .clang_args(["-x", "c++"]) // c++ mode even though the file is .h
         .generate()
         .expect("generating Compiler bindings");
 
