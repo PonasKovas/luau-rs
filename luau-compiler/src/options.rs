@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
 use luau_sys::common::bytecode::LuauBytecodeType;
+use std::{collections::HashMap, ffi::CString};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompilerOptions {
@@ -11,15 +10,15 @@ pub struct CompilerOptions {
     pub generate_type_info_for_all: bool,
     pub coverage: CoverageLevel,
 
-    pub alt_vector: Option<VectorOptions>,
-    pub mutable_globals: Vec<String>,
-    pub userdata_types: Vec<String>,
-    pub known_libraries: Vec<LibraryWithKnownMembers>,
-    pub disabled_builtins: Vec<String>,
+    pub(crate) alt_vector: Option<VectorOptions>,
+    pub(crate) mutable_globals: Vec<CString>,
+    pub(crate) userdata_types: Vec<CString>,
+    pub(crate) known_libraries: Vec<LibraryWithKnownMembersC>,
+    pub(crate) disabled_builtins: Vec<CString>,
 }
 
-impl Default for CompilerOptions {
-    fn default() -> Self {
+impl CompilerOptions {
+    pub fn new() -> Self {
         Self {
             optimization: Default::default(),
             debug: Default::default(),
@@ -31,6 +30,64 @@ impl Default for CompilerOptions {
             known_libraries: Vec::new(),
             disabled_builtins: Vec::new(),
         }
+    }
+    pub fn set_alt_vector(
+        &mut self,
+        vector_lib: impl AsRef<str>,
+        vector_constructor: impl AsRef<str>,
+        vector_type: impl AsRef<str>,
+    ) -> &mut Self {
+        self.alt_vector = Some(VectorOptions {
+            library_name: CString::new(vector_lib.as_ref().to_owned()).unwrap(),
+            constructor: CString::new(vector_constructor.as_ref().to_owned()).unwrap(),
+            type_name: CString::new(vector_type.as_ref().to_owned()).unwrap(),
+        });
+
+        self
+    }
+    pub fn set_mutable_globals(
+        &mut self,
+        globals: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> &mut Self {
+        self.mutable_globals = globals
+            .into_iter()
+            .map(|g| CString::new(g.as_ref().to_owned()).unwrap())
+            .collect();
+
+        self
+    }
+    pub fn set_userdata_types(
+        &mut self,
+        userdata_types: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> &mut Self {
+        self.userdata_types = userdata_types
+            .into_iter()
+            .map(|g| CString::new(g.as_ref().to_owned()).unwrap())
+            .collect();
+
+        self
+    }
+    pub fn set_disabled_builtins(
+        &mut self,
+        builtins: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> &mut Self {
+        self.disabled_builtins = builtins
+            .into_iter()
+            .map(|g| CString::new(g.as_ref().to_owned()).unwrap())
+            .collect();
+
+        self
+    }
+    pub fn add_known_library(&mut self, library: LibraryWithKnownMembers) -> &mut Self {
+        self.known_libraries.push(library.into());
+
+        self
+    }
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -80,12 +137,18 @@ impl Default for CoverageLevel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VectorOptions {
-    pub library_name: String,
-    pub constructor: String,
-    pub type_name: String,
+pub(crate) struct VectorOptions {
+    pub(crate) library_name: CString,
+    pub(crate) constructor: CString,
+    pub(crate) type_name: CString,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LibraryWithKnownMembersC {
+    pub(crate) name: CString,
+    pub(crate) types: HashMap<String, LuauBytecodeType>,
+    pub(crate) constants: HashMap<String, Constant>,
+}
 #[derive(Debug, Clone, PartialEq)]
 pub struct LibraryWithKnownMembers {
     pub name: String,
@@ -98,6 +161,15 @@ impl LibraryWithKnownMembers {
             name: name.as_ref().to_owned(),
             types: HashMap::new(),
             constants: HashMap::new(),
+        }
+    }
+}
+impl From<LibraryWithKnownMembers> for LibraryWithKnownMembersC {
+    fn from(value: LibraryWithKnownMembers) -> Self {
+        Self {
+            name: CString::new(value.name).unwrap(),
+            types: value.types,
+            constants: value.constants,
         }
     }
 }

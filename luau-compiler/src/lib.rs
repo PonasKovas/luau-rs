@@ -10,7 +10,7 @@ use luau_sys::{
 use malloced::Malloced;
 use std::{
     cell::Cell,
-    ffi::{c_char, c_int, CStr, CString},
+    ffi::{c_char, c_int, CStr},
     iter::once,
     ptr::null,
 };
@@ -21,27 +21,29 @@ mod options;
 pub use error::CompileError;
 pub use options::*;
 
-pub fn compile(code: &str, opts: CompilerOptions) -> Result<Malloced<[u8]>, CompileError> {
-    let owned_vector_cstrings = opts.alt_vector.map(|alt| {
-        (
-            CString::new(alt.library_name).unwrap(),
-            CString::new(alt.constructor).unwrap(),
-            CString::new(alt.type_name).unwrap(),
-        )
-    });
+pub fn compile(code: &str, opts: &CompilerOptions) -> Result<Malloced<[u8]>, CompileError> {
     #[allow(non_snake_case)]
-    let (vectorLib, vectorCtor, vectorType) = owned_vector_cstrings
+    let (vectorLib, vectorCtor, vectorType) = opts
+        .alt_vector
         .as_ref()
-        .map(|(lib, ctor, ty)| (lib.as_ptr(), ctor.as_ptr(), ty.as_ptr()))
+        .map(
+            |VectorOptions {
+                 library_name,
+                 constructor,
+                 type_name,
+             }| {
+                (
+                    library_name.as_ptr(),
+                    constructor.as_ptr(),
+                    type_name.as_ptr(),
+                )
+            },
+        )
         .unwrap_or((null(), null(), null()));
 
     macro_rules! cstr_ptr_from_string {
         ($var:ident = $strings:expr) => {
             let temp: Vec<_> = $strings
-                .into_iter()
-                .map(|s| CString::new(s).unwrap())
-                .collect();
-            let temp: Vec<_> = temp
                 .iter()
                 .map(|s| s.as_ptr())
                 .chain(once(null()))
@@ -55,20 +57,22 @@ pub fn compile(code: &str, opts: CompilerOptions) -> Result<Malloced<[u8]>, Comp
     cstr_ptr_from_string!(userdataTypes = opts.userdata_types);
     cstr_ptr_from_string!(disabledBuiltins = opts.disabled_builtins);
 
-    let known_libraries: Vec<_> = opts
+    let temp: Vec<_> = opts
         .known_libraries
         .iter()
-        .map(|lib| lib.name.clone())
+        .map(|l| l.name.as_ptr())
+        .chain(once(null()))
         .collect();
-    cstr_ptr_from_string!(librariesWithKnownMembers = known_libraries);
+    #[allow(non_snake_case)]
+    let librariesWithKnownMembers = temp.as_ptr();
 
-    // we know that this execution path will be very linear, we call the luau::compile function
+    // we call the luau::compile function
     // it will call our callbacks and then its gonna be done, all in this scope
     // so we can keep the data in thread local storage to make it accessible for the callbacks
     thread_local! {
-        static LIBS_WITH_KNOWN_MEMBERS: Cell<Vec<LibraryWithKnownMembers>> = Cell::new(Vec::new());
+        static LIBS_WITH_KNOWN_MEMBERS: Cell<Vec<LibraryWithKnownMembersC>> = Cell::new(Vec::new());
     }
-    LIBS_WITH_KNOWN_MEMBERS.set(opts.known_libraries);
+    LIBS_WITH_KNOWN_MEMBERS.set(opts.known_libraries.clone());
 
     unsafe extern "C" fn lib_member_type_cb(lib: *const c_char, member: *const c_char) -> c_int {
         let lib_name = unsafe { CStr::from_ptr(lib) };
