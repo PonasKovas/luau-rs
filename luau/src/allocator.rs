@@ -1,4 +1,10 @@
-use std::{alloc::Layout, num::NonZero, ptr::NonNull};
+use std::{
+    alloc::Layout,
+    ffi::c_void,
+    hint::unreachable_unchecked,
+    num::NonZero,
+    ptr::{null_mut, NonNull},
+};
 
 /// A trait for allocators that luau can use inside the VM
 ///
@@ -6,19 +12,19 @@ use std::{alloc::Layout, num::NonZero, ptr::NonNull};
 pub trait LuauAllocator {
     /// Called to allocate `size` number of bytes of memory, must return a pointer to that memory
     /// return `None` to signal failure
-    fn alloc(&mut self, size: NonZero<usize>) -> Option<NonNull<()>>;
+    unsafe fn alloc(&mut self, size: NonZero<usize>) -> Option<NonNull<()>>;
     /// Called to resize already allocated memory, `ptr` is the old pointer,
     /// `old_size` is the original size, `new_size` is the new requested size
     /// must returns a pointer to the new allocated memory of size `new_size`
     /// return `None` to signal failure
-    fn realloc(
+    unsafe fn realloc(
         &mut self,
         ptr: NonNull<()>,
         old_size: NonZero<usize>,
         new_size: NonZero<usize>,
     ) -> Option<NonNull<()>>;
     /// Called to deallocate memory at `ptr` of size `size`
-    fn free(&mut self, ptr: NonNull<()>, size: NonZero<usize>);
+    unsafe fn free(&mut self, ptr: NonNull<()>, size: NonZero<usize>);
 }
 
 // Default allocator:
@@ -52,7 +58,7 @@ impl Default for LuauAllocatorDefault {
 }
 
 impl LuauAllocator for LuauAllocatorDefault {
-    fn alloc(&mut self, size: NonZero<usize>) -> Option<NonNull<()>> {
+    unsafe fn alloc(&mut self, size: NonZero<usize>) -> Option<NonNull<()>> {
         let size = size.get();
 
         // check if within limits
@@ -72,7 +78,7 @@ impl LuauAllocator for LuauAllocatorDefault {
 
         NonNull::new(ptr)
     }
-    fn realloc(
+    unsafe fn realloc(
         &mut self,
         ptr: std::ptr::NonNull<()>,
         old_size: NonZero<usize>,
@@ -82,10 +88,8 @@ impl LuauAllocator for LuauAllocatorDefault {
         let new_size = new_size.get();
 
         let size_change: isize = new_size as isize - old_size as isize;
-        // hopefully luau doesnt create poop here and free more memory than is allocated
-        // but just in case we will saturate at 0
-        // (and at usize::MAX, but this is not likely i think)
-        let new_used_memory = self.used_memory.saturating_add_signed(size_change);
+        // its UB for this to ever wrap but i just didnt find a different method to add usize + isize
+        let new_used_memory = self.used_memory.wrapping_add_signed(size_change);
 
         // check if within limits
         if let Some(limit) = self.memory_limit {
@@ -105,16 +109,14 @@ impl LuauAllocator for LuauAllocatorDefault {
 
         NonNull::new(ptr)
     }
-    fn free(&mut self, ptr: std::ptr::NonNull<()>, size: NonZero<usize>) {
+    unsafe fn free(&mut self, ptr: std::ptr::NonNull<()>, size: NonZero<usize>) {
         let size = size.get();
 
         // deallocate with rust's global allocator
         let layout = get_layout(size).unwrap();
         unsafe { std::alloc::dealloc(ptr.as_ptr() as *mut u8, layout) };
 
-        // hopefully luau doesnt create poop here and free more memory than is allocated
-        // but just in case we will saturate at 0
-        self.used_memory = self.used_memory.saturating_sub(size);
+        self.used_memory -= size;
     }
 }
 
@@ -124,4 +126,41 @@ fn get_layout(size: usize) -> Option<Layout> {
     let alignment = align_of::<libc::max_align_t>();
 
     Layout::from_size_align(size, alignment).ok()
+}
+
+fn raw<A: LuauAllocator>() -> luau_sys::vm::lua_Alloc {
+    unsafe extern "C" fn raw_alloc<A: LuauAllocator>(
+        alloc: *mut c_void,
+        ptr: *mut c_void,
+        osize: usize,
+        nsize: usize,
+    ) -> *mut c_void {
+        let allocator = unsafe { (alloc as *mut A).as_mut().unwrap_unchecked() };
+        let ptr = ptr as *mut ();
+
+        match (NonNull::new(ptr), NonZero::new(osize), NonZero::new(nsize)) {
+            (Some(p), Some(s), None) => unsafe { allocator.free(p, s) },
+            (Some(p), Some(os), Some(ns)) => {
+                return match unsafe { allocator.realloc(p, os, ns) } {
+                    Some(ptr) => ptr.as_ptr() as *mut c_void,
+                    None => null_mut(),
+                }
+            }
+            (None, None, Some(s)) => {
+                return match unsafe { allocator.alloc(s) } {
+                    Some(ptr) => ptr.as_ptr() as *mut c_void,
+                    None => null_mut(),
+                }
+            }
+
+            // all other variants are invalid and UB, theres no point in trying to panic here
+            // or handle it differently since we cant unwind across the C abi
+            // just embrace the UB.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        null_mut()
+    }
+
+    Some(raw_alloc::<A>)
 }

@@ -116,6 +116,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "luau-compiler"
+version = "0.1.0"
+dependencies = [
+ "luau-sys",
+ "malloced",
+]
+
+[[package]]
 name = "luau-sys"
 version = "0.1.0"
 dependencies = [

@@ -1,8 +1,24 @@
 use luau_sys::vm::lua_State;
-use std::ptr::NonNull;
+use std::{ptr::NonNull, sync::Arc};
 
-pub struct Luau {}
+use crate::allocator::LuauAllocator;
+
+pub struct Luau {
+    raw: Arc<RawState>,
+}
 
 struct RawState {
-    raw: NonNull<lua_State>,
+    ptr: NonNull<lua_State>,
+}
+
+impl Drop for RawState {
+    fn drop(&mut self) {
+        // destroy the state
+    }
+}
+
+impl Luau {
+    pub fn new(allocator: impl LuauAllocator) -> Self {
+        todo!()
+    }
 }

@@ -1,0 +1,9 @@
+[package]
+name = "luau-compiler"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+luau-sys = { path = "../luau-sys/" }
+malloced = "1.3.1"
+# libc = "0.2.169"
