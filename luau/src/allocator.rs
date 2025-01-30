@@ -128,7 +128,7 @@ fn get_layout(size: usize) -> Option<Layout> {
     Layout::from_size_align(size, alignment).ok()
 }
 
-fn raw<A: LuauAllocator>() -> luau_sys::vm::lua_Alloc {
+pub(crate) fn raw<A: LuauAllocator>() -> luau_sys::vm::lua_Alloc {
     unsafe extern "C" fn raw_alloc<A: LuauAllocator>(
         alloc: *mut c_void,
         ptr: *mut c_void,
